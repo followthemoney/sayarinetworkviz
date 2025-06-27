@@ -365,19 +365,19 @@
                     // Store node data
                     nodeData.set(row.source, {
                         label: row.source_label || row.source,
-                        type: row.source_type
+                        nodeType: row.source_type
                     });
                     nodeData.set(row.target, {
                         label: row.target_label || row.target,
-                        type: row.target_type
+                        nodeType: row.target_type
                     });
                 }
             });
             
             // Assign colors to node types
-            const types = Array.from(typeSet).filter(type => type);
-            types.forEach((type, index) => {
-                nodeTypeColors[type] = colorPalette[index % colorPalette.length];
+            const types = Array.from(typeSet).filter(nodeType => nodeType);
+            types.forEach((nodeType, index) => {
+                nodeTypeColors[nodeType] = colorPalette[index % colorPalette.length];
             });
             
             // Add nodes to graph
@@ -386,8 +386,8 @@
                 if (data) {
                     graph.addNode(nodeId, {
                         label: data.label,
-                        type: data.type,
-                        color: nodeTypeColors[data.type] || '#999',
+                        nodeType: data.nodeType,
+                        color: nodeTypeColors[data.nodeType] || '#999',
                         size: 8, // Will be updated based on degree
                         x: Math.random() * 10 - 5,
                         y: Math.random() * 10 - 5
@@ -455,7 +455,7 @@
             const legendItems = document.getElementById('legend-items');
             legendItems.innerHTML = '';
             
-            Object.entries(nodeTypeColors).forEach(([type, color]) => {
+            Object.entries(nodeTypeColors).forEach(([nodeType, color]) => {
                 const item = document.createElement('div');
                 item.className = 'legend-item';
                 
@@ -464,7 +464,7 @@
                 colorDiv.style.backgroundColor = color;
                 
                 const label = document.createElement('span');
-                label.textContent = type || 'Unknown';
+                label.textContent = nodeType || 'Unknown';
                 
                 item.appendChild(colorDiv);
                 item.appendChild(label);
@@ -548,7 +548,7 @@
                 const degree = graph.degree(event.node);
                 nodeInfo.innerHTML = `
                     <strong>${node.label}</strong><br>
-                    Type: ${node.type}<br>
+                    Type: ${node.nodeType}<br>
                     Connections: ${degree}
                 `;
                 nodeInfo.style.display = "block";
@@ -600,7 +600,7 @@
                 const matchingNodes = new Set();
                 graph.forEachNode((node, attributes) => {
                     if (attributes.label.toLowerCase().includes(searchTerm) ||
-                        attributes.type.toLowerCase().includes(searchTerm)) {
+                        attributes.nodeType.toLowerCase().includes(searchTerm)) {
                         matchingNodes.add(node);
                     }
                 });
@@ -633,7 +633,7 @@
         function resetHighlight() {
             selectedNode = null;
             graph.forEachNode((node, attributes) => {
-                graph.setNodeAttribute(node, "color", nodeTypeColors[attributes.type] || '#999');
+                graph.setNodeAttribute(node, "color", nodeTypeColors[attributes.nodeType] || '#999');
                 graph.setNodeAttribute(node, "size", attributes.size);
             });
             
