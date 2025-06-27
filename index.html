@@ -66,6 +66,34 @@
             flex-wrap: wrap;
         }
         
+        .layout-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: #f5f5f5;
+            padding: 8px 12px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+        }
+        
+        .layout-controls label {
+            font-size: 12px;
+            font-weight: bold;
+            color: #666;
+            min-width: 70px;
+        }
+        
+        .layout-controls input[type="range"] {
+            width: 100px;
+        }
+        
+        .layout-controls span {
+            font-size: 12px;
+            font-weight: bold;
+            color: #333;
+            min-width: 25px;
+        }
+        
         .search-box {
             padding: 8px 12px;
             border: 2px solid #ddd;
@@ -262,8 +290,20 @@
         <div id="controls" class="controls" style="display: none;">
             <input type="text" id="search" class="search-box" placeholder="Search nodes...">
             <button id="reset-btn" class="button">Reset View</button>
-            <button id="layout-btn" class="button">Apply Layout</button>
+            <button id="layout-btn" class="button">Start Layout</button>
             <button id="center-btn" class="button">Center View</button>
+            
+            <div class="layout-controls">
+                <label for="edge-length">Edge Length:</label>
+                <input type="range" id="edge-length" min="0.5" max="3" step="0.1" value="1.5">
+                <span id="edge-length-value">1.5</span>
+            </div>
+            
+            <div class="layout-controls">
+                <label for="repulsion">Repulsion:</label>
+                <input type="range" id="repulsion" min="0.1" max="2" step="0.1" value="0.5">
+                <span id="repulsion-value">0.5</span>
+            </div>
         </div>
         
         <div id="sigma-container" style="display: none;"></div>
@@ -280,6 +320,9 @@
         let nodeTypeColors = {};
         let selectedNode = null;
         let isLayoutRunning = false;
+        let layoutInterval = null;
+        let edgeLength = 1.5;
+        let repulsionStrength = 0.5;
         
         // Color palette for different node types
         const colorPalette = [
@@ -384,11 +427,14 @@
             nodeSet.forEach(nodeId => {
                 const data = nodeData.get(nodeId);
                 if (data) {
+                    const initialSize = 8; // Will be updated based on degree
                     graph.addNode(nodeId, {
                         label: data.label,
                         nodeType: data.nodeType,
                         color: nodeTypeColors[data.nodeType] || '#999',
-                        size: 8, // Will be updated based on degree
+                        originalColor: nodeTypeColors[data.nodeType] || '#999',
+                        size: initialSize,
+                        originalSize: initialSize,
                         x: Math.random() * 10 - 5,
                         y: Math.random() * 10 - 5
                     });
@@ -433,7 +479,9 @@
             // Update node sizes based on degree
             graph.forEachNode((node, attributes) => {
                 const degree = graph.degree(node);
-                graph.setNodeAttribute(node, 'size', Math.min(Math.max(degree * 2 + 5, 8), 25));
+                const newSize = Math.min(Math.max(degree * 2 + 5, 8), 25);
+                graph.setNodeAttribute(node, 'size', newSize);
+                graph.setNodeAttribute(node, 'originalSize', newSize);
             });
             
             // Update UI
@@ -499,7 +547,7 @@
             
             // Apply initial layout
             setTimeout(() => {
-                applyLayout();
+                toggleLayout();
             }, 500);
         }
         
@@ -521,10 +569,11 @@
                 
                 // Highlight connected nodes and edges
                 graph.forEachNode((node, attributes) => {
+                    const isNeighbor = neighbors.has(node);
                     graph.setNodeAttribute(node, "color", 
-                        neighbors.has(node) ? attributes.color : "#ddd");
+                        isNeighbor ? attributes.originalColor : "#ddd");
                     graph.setNodeAttribute(node, "size", 
-                        neighbors.has(node) ? attributes.size : attributes.size * 0.5);
+                        isNeighbor ? attributes.originalSize : attributes.originalSize * 0.5);
                 });
                 
                 graph.forEachEdge((edge, attributes, source, target) => {
@@ -548,8 +597,8 @@
                 const degree = graph.degree(event.node);
                 nodeInfo.innerHTML = `
                     <strong>${node.label}</strong><br>
-                    Type: ${node.nodeType}<br>
-                    Connections: ${degree}
+                    <strong>Type:</strong> ${node.nodeType || 'Unknown'}<br>
+                    <strong>Connections:</strong> ${degree}
                 `;
                 nodeInfo.style.display = "block";
             });
@@ -581,10 +630,10 @@
             
             // Update tooltip positions
             document.addEventListener("mousemove", (event) => {
-                nodeInfo.style.left = (event.clientX + 10) + "px";
-                nodeInfo.style.top = (event.clientY + 10) + "px";
-                edgeInfo.style.left = (event.clientX + 10) + "px";
-                edgeInfo.style.top = (event.clientY - 40) + "px";
+                nodeInfo.style.left = (event.clientX + 5) + "px";
+                nodeInfo.style.top = (event.clientY - 5) + "px";
+                edgeInfo.style.left = (event.clientX + 5) + "px";
+                edgeInfo.style.top = (event.clientY - 50) + "px";
             });
             
             // Search functionality
@@ -623,18 +672,34 @@
                 document.getElementById("search").value = "";
             });
             
-            document.getElementById("layout-btn").addEventListener("click", applyLayout);
+            document.getElementById("layout-btn").addEventListener("click", toggleLayout);
             
             document.getElementById("center-btn").addEventListener("click", () => {
                 sigmaInstance.getCamera().setState({ x: 0, y: 0, ratio: 1 });
+            });
+            
+            // Layout parameter controls
+            const edgeLengthSlider = document.getElementById("edge-length");
+            const edgeLengthValue = document.getElementById("edge-length-value");
+            const repulsionSlider = document.getElementById("repulsion");
+            const repulsionValue = document.getElementById("repulsion-value");
+            
+            edgeLengthSlider.addEventListener("input", (event) => {
+                edgeLength = parseFloat(event.target.value);
+                edgeLengthValue.textContent = edgeLength.toFixed(1);
+            });
+            
+            repulsionSlider.addEventListener("input", (event) => {
+                repulsionStrength = parseFloat(event.target.value);
+                repulsionValue.textContent = repulsionStrength.toFixed(1);
             });
         }
         
         function resetHighlight() {
             selectedNode = null;
             graph.forEachNode((node, attributes) => {
-                graph.setNodeAttribute(node, "color", nodeTypeColors[attributes.nodeType] || '#999');
-                graph.setNodeAttribute(node, "size", attributes.size);
+                graph.setNodeAttribute(node, "color", attributes.originalColor);
+                graph.setNodeAttribute(node, "size", attributes.originalSize);
             });
             
             graph.forEachEdge((edge) => {
@@ -644,26 +709,40 @@
             sigmaInstance.refresh();
         }
         
-        function applyLayout() {
+        function toggleLayout() {
+            if (isLayoutRunning) {
+                stopLayout();
+            } else {
+                startLayout();
+            }
+        }
+        
+        function startLayout() {
             if (isLayoutRunning || !graph) return;
             
             isLayoutRunning = true;
             const button = document.getElementById("layout-btn");
-            button.textContent = "Applying Layout...";
-            button.disabled = true;
+            button.textContent = "Stop Layout";
+            button.style.backgroundColor = "#e74c3c";
             
-            // Simple force-directed layout
-            for (let i = 0; i < 150; i++) {
-                setTimeout(() => {
-                    applyForceDirectedStep();
-                    sigmaInstance.refresh();
-                    
-                    if (i === 149) {
-                        isLayoutRunning = false;
-                        button.textContent = "Apply Layout";
-                        button.disabled = false;
-                    }
-                }, i * 15);
+            // Run layout continuously
+            layoutInterval = setInterval(() => {
+                applyForceDirectedStep();
+                sigmaInstance.refresh();
+            }, 50); // 20 FPS
+        }
+        
+        function stopLayout() {
+            if (!isLayoutRunning) return;
+            
+            isLayoutRunning = false;
+            const button = document.getElementById("layout-btn");
+            button.textContent = "Start Layout";
+            button.style.backgroundColor = "#4CAF50";
+            
+            if (layoutInterval) {
+                clearInterval(layoutInterval);
+                layoutInterval = null;
             }
         }
         
@@ -678,7 +757,7 @@
                     y: graph.getNodeAttribute(nodeA, "y") 
                 };
                 
-                // Repulsive forces
+                // Repulsive forces between all nodes
                 nodes.forEach(nodeB => {
                     if (nodeA === nodeB) return;
                     
@@ -690,7 +769,8 @@
                     const dy = posA.y - posB.y;
                     const distance = Math.sqrt(dx * dx + dy * dy) || 0.1;
                     
-                    const force = 0.5 / distance;
+                    // Use adjustable repulsion strength
+                    const force = repulsionStrength / distance;
                     fx += (dx / distance) * force;
                     fy += (dy / distance) * force;
                 });
@@ -705,14 +785,18 @@
                     const dy = posB.y - posA.y;
                     const distance = Math.sqrt(dx * dx + dy * dy) || 0.1;
                     
-                    const force = distance * 0.02;
-                    fx += (dx / distance) * force;
-                    fy += (dy / distance) * force;
+                    // Use adjustable edge length - stronger attraction when distance > desired length
+                    const desiredDistance = edgeLength;
+                    const springForce = (distance - desiredDistance) * 0.02;
+                    fx += (dx / distance) * springForce;
+                    fy += (dy / distance) * springForce;
                 });
                 
+                // Apply damping to prevent oscillation
+                const damping = 0.8;
                 positions[nodeA] = {
-                    x: posA.x + fx * 0.1,
-                    y: posA.y + fy * 0.1
+                    x: posA.x + fx * 0.1 * damping,
+                    y: posA.y + fy * 0.1 * damping
                 };
             });
             
@@ -724,6 +808,11 @@
         }
         
         function clearAll() {
+            // Stop layout if running
+            if (isLayoutRunning) {
+                stopLayout();
+            }
+            
             selectedFiles = [];
             allData = [];
             nodeTypeColors = {};
@@ -738,6 +827,14 @@
             document.getElementById('file-list').innerHTML = '';
             document.getElementById('process-btn').disabled = true;
             document.getElementById('search').value = '';
+            
+            // Reset layout controls
+            document.getElementById('edge-length').value = 1.5;
+            document.getElementById('edge-length-value').textContent = '1.5';
+            document.getElementById('repulsion').value = 0.5;
+            document.getElementById('repulsion-value').textContent = '0.5';
+            edgeLength = 1.5;
+            repulsionStrength = 0.5;
             
             // Hide visualization elements
             document.getElementById('stats').style.display = 'none';
